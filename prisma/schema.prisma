@@ -1,0 +1,201 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "mongodb"
+    url      = env("DATABASE_URL")
+}
+
+model Account {
+    id                String  @id @default(auto()) @map("_id") @db.ObjectId
+    userId            String
+    type              String
+    provider          String
+    providerAccountId String
+    refresh_token     String? @db.String
+    access_token      String? @db.String
+    expires_at        Int?
+    token_type        String?
+    scope             String?
+    id_token          String? @db.String
+    session_state     String?
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@unique([provider, providerAccountId])
+}
+
+model Session {
+    id           String   @id @default(auto()) @map("_id") @db.ObjectId
+    sessionToken String   @unique
+    userId       String
+    expires      DateTime
+    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+    id         String   @id @default(auto()) @map("_id") @db.ObjectId
+    identifier String
+    token      String   @unique
+    expires    DateTime
+
+    @@unique([identifier, token])
+}
+
+enum Role {
+    USER
+    FAKE_ADMIN
+    ADMIN
+}
+
+model User {
+    id                String        @id @default(auto()) @map("_id") @db.ObjectId
+    name              String?
+    displayName       String?
+    email             String?       @unique
+    emailVerified     DateTime?
+    image             String?
+    role              Role?         @default(USER)
+    accounts          Account[]
+    sessions          Session[]
+    orders            Order[]
+    products          Product[]
+    requirementFields UsersFields[]
+    cart              Cart?
+}
+
+model Category {
+    id            String               @id @default(auto()) @map("_id") @db.ObjectId
+    name          String               @unique
+    slug          String               @unique
+    description   String?
+    moreInfo      Json?
+    bannerImg     String?
+    logoImg       String?
+    isTopup       Boolean?             @default(false)
+    requirement   CategoryRequirement?
+    products      Product[]
+    subCategories SubCategory[]
+    createdAt     DateTime             @default(now())
+    updatedAt     DateTime             @updatedAt
+}
+
+model CategoryRequirement {
+    id          String                     @id @default(auto()) @map("_id") @db.ObjectId
+    title       String
+    description String?
+    fields      CategoryRequirementField[]
+    img         String?
+    category    Category?                  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+    categoryId  String?                    @unique @db.ObjectId
+}
+
+model CategoryRequirementField {
+    id                    String               @id @default(auto()) @map("_id") @db.ObjectId
+    name                  String
+    value                 String?
+    placeholder           String?
+    type                  String?              @default("text")
+    categoryRequirement   CategoryRequirement? @relation(fields: [categoryRequirementId], references: [id], onDelete: Cascade)
+    categoryRequirementId String?              @db.ObjectId
+    users                 UsersFields[]
+}
+
+model UsersFields {
+    id      String                   @id @default(auto()) @map("_id") @db.ObjectId
+    userId  String                   @db.ObjectId
+    fieldId String                   @db.ObjectId
+    user    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    field   CategoryRequirementField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+    value   String?
+}
+
+model SubCategory {
+    id          String    @id @default(auto()) @map("_id") @db.ObjectId
+    name        String    @unique
+    slug        String    @unique
+    description String?
+    moreInfo    Json?
+    logoImg     String?
+    categoryId  String?   @db.ObjectId
+    category    Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+    products    Product[]
+}
+
+model Product {
+    id            String             @id @default(auto()) @map("_id") @db.ObjectId
+    title         String
+    description   String?
+    img           String?
+    price         Int
+    discount      Int?               @default(0)
+    stock         Int?               @default(0)
+    categoryId    String?            @db.ObjectId
+    moreInfo      Json?
+    userId        String?            @db.ObjectId
+    subCategoryId String?            @db.ObjectId
+    orders        ProductsOnOrders[]
+    category      Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+    user          User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+    subCategory   SubCategory?       @relation(fields: [subCategoryId], references: [id], onDelete: Cascade)
+    createdAt     DateTime           @default(now())
+    updatedAt     DateTime           @updatedAt
+}
+
+model ProductsOnOrders {
+    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    productId String   @db.ObjectId
+    amount    Int
+    orderId   String   @db.ObjectId
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+    order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Cart {
+    id       String @id @default(auto()) @map("_id") @db.ObjectId
+    products Json[]
+    userId   String @unique @db.ObjectId
+    user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum PaymentStatus {
+    WAITING_PAYMENT
+    CANCELED
+    PAID
+    VERIFIED
+}
+
+model Order {
+    id            String             @id @default(auto()) @map("_id") @db.ObjectId
+    total         Int?               @default(0)
+    tax           Int?               @default(0)
+    discount      Int?               @default(0)
+    paymentUrl    String?
+    paymentToken  String?
+    requirements  Json?
+    products      ProductsOnOrders[]
+    paymentMethod String?
+    status        PaymentStatus?     @default(WAITING_PAYMENT)
+    paidAt        DateTime?
+    userId        String?            @db.ObjectId
+    user          User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+    rating        Rating?
+    createdAt     DateTime           @default(now())
+    updatedAt     DateTime           @updatedAt
+}
+
+model Rating {
+    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    star      Int
+    comment   String?
+    orderId   String   @unique @db.ObjectId
+    order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
